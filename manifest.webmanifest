@@ -1,0 +1,17 @@
+{
+  "name": "Mon Dojo",
+  "short_name": "Mon Dojo",
+  "description": "Ménage, santé, sport et mental : ton dojo perso.",
+  "lang": "fr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2a0e5c",
+  "theme_color": "#2a0e5c",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

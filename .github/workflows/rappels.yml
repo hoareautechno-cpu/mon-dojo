@@ -1,0 +1,35 @@
+# Rappels gratuits envoyés sur le téléphone via l'appli ntfy.
+# Heures en UTC : La Réunion = UTC+4. GitHub peut avoir 5 à 20 min de retard.
+name: Rappels
+
+on:
+  schedule:
+    - cron: "30 3 * * *"   # 7 h 30 : priorités du jour
+    - cron: "30 8 * * *"   # 12 h 30 : déjeuner
+    - cron: "30 16 * * *"  # 20 h 30 : check-in du soir
+    - cron: "0 3 * * 1"    # lundi 7 h : bilan de la semaine
+    - cron: "0 14 * * 0"   # dimanche 18 h : préparer la semaine
+  workflow_dispatch: {}      # bouton « Run workflow » pour tester
+
+env:
+  # Ton canal ntfy (abonne-toi à ce nom dans l'appli ntfy).
+  NTFY_TOPIC: mondojo-uzh0p60ffw
+  APP_URL: https://hoareautechno-cpu.github.io/mon-dojo/
+
+jobs:
+  rappel:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Envoyer le rappel
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          case "$SCHEDULE" in
+            "30 3 * * *")  T="Ohayō ! ⚡"; M="Choisis tes 3 priorités du jour (30 secondes).";;
+            "30 8 * * *")  T="Pause déjeuner 🍱"; M="Un vrai repas avec des protéines, sans sauter de repas.";;
+            "30 16 * * *") T="Check-in du soir 🌙"; M="Humeur, envies, 10 min de rangement. Tu gères.";;
+            "0 3 * * 1")   T="Bilan de la semaine 📜"; M="Ton bilan hebdo est prêt dans Mon Dojo.";;
+            "0 14 * * 0")  T="Prépare ta semaine 🗓️"; M="Place tes séances de sport et tes priorités dans « Ma semaine ».";;
+            *)             T="Test Mon Dojo 💥"; M="Les rappels fonctionnent !";;
+          esac
+          curl -sS -H "Title: $T" -H "Click: $APP_URL" -H "Tags: dojo" -d "$M" "https://ntfy.sh/$NTFY_TOPIC"
