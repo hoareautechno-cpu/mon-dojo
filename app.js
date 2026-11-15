@@ -91,6 +91,47 @@ function defaultChores() {
     c('Changer les draps', 'Chambres', { type: 'every', n: 14 }, 15),
   ];
 }
+// Personnes du foyer : « me » = l'utilisateur. Les autres reçoivent des tâches déléguées.
+function defaultPeople(name) {
+  return [
+    { id: 'me', name: name || 'Moi', emoji: '👨' },
+    { id: 'p-maman', name: 'Maman', emoji: '👩' },
+    { id: 'p-ado', name: 'Ado', emoji: '🧑' },
+    { id: 'p-petite', name: 'Petite', emoji: '👧' },
+  ];
+}
+const person = (id) => S.people.find((p) => p.id === (id || 'me')) || S.people[0];
+const isMine = (c) => !c.who || c.who === 'me';
+const mineLog = () => S.choreLog.filter((l) => !l.who || l.who === 'me');
+
+// Planning familial (tableau des tâches de la maison)
+function familyChores() {
+  const c = (name, zone, who, freq, minutes = 10) => ({ id: uid(), name, zone, who, freq, minutes, last: null });
+  const ws = weekStart(todayKey());
+  const ALL = [0, 1, 2, 3, 4, 5, 6];
+  return [
+    c('🍳 Préparer le repas', 'Cuisine', 'me', { type: 'daily' }, 45),
+    c('🧺 Lessive (1 sem. sur 2)', 'Linge', 'me', { type: 'weekly', days: [2], alt: true, anchor: ws }, 20),
+    c('🛁 Salle de bain + toilettes', 'Salle de bain', 'me', { type: 'weekly', days: [5] }, 30),
+    c('🧹 Rangement tous ensemble (30 min)', 'Maison', 'me', { type: 'weekly', days: [6] }, 30),
+    c('🍽 Vaisselle / lave-vaisselle', 'Cuisine', 'p-maman', { type: 'daily' }, 15),
+    c('🧺 Lessive (1 sem. sur 2)', 'Linge', 'p-maman', { type: 'weekly', days: [2], alt: true, anchor: addDays(ws, 7) }, 20),
+    c('🛒 Courses', 'Courses', 'p-maman', { type: 'weekly', days: [5] }, 60),
+    c('🧹 Rangement tous ensemble (30 min)', 'Maison', 'p-maman', { type: 'weekly', days: [6] }, 30),
+    c('🍴 Mettre et débarrasser la table', 'Cuisine', 'p-ado', { type: 'weekly', days: ALL }, 10),
+    c('🗑 Sortir les poubelles (soir)', 'Maison', 'p-ado', { type: 'weekly', days: [0, 3] }, 5),
+    c('♻️ Sortir le recyclable (1 sem. sur 2)', 'Maison', 'p-ado', { type: 'weekly', days: [2], alt: true, anchor: ws }, 5),
+    c('🧹 Aspirateur salon + sa chambre', 'Salon', 'p-ado', { type: 'weekly', days: [2] }, 20),
+    c('🛏 Ranger sa chambre', 'Chambres', 'p-ado', { type: 'weekly', days: [5] }, 15),
+    c('🧹 Rangement tous ensemble (30 min)', 'Maison', 'p-ado', { type: 'weekly', days: [6] }, 30),
+    c('🧸 Ranger ses jouets', 'Chambres', 'p-petite', { type: 'daily' }, 10),
+    c('👕 Linge sale au panier', 'Linge', 'p-petite', { type: 'daily' }, 2),
+    c('👚 Aider à plier le linge', 'Linge', 'p-petite', { type: 'weekly', days: [2] }, 10),
+    c('🪴 Arroser les plantes (avec un adulte)', 'Maison', 'p-petite', { type: 'weekly', days: [5] }, 5),
+    c('🧹 Rangement tous ensemble (30 min)', 'Maison', 'p-petite', { type: 'weekly', days: [6] }, 30),
+  ];
+}
+
 function defaultPlans() {
   return [
     { id: uid(), trigger: 'Écran / soirée', ifTxt: "j'ai une envie de sucré le soir devant un écran", thenTxt: 'je bois un grand verre d’eau, je me brosse les dents et j’attends 15 min' },
@@ -106,6 +147,7 @@ function newState(name) {
     profile: { name: name || 'Patrice', sportGoal: 3 },
     days: {},
     inbox: [],
+    people: defaultPeople(name),
     chores: defaultChores(),
     choreLog: [],
     cravings: [],
@@ -133,7 +175,15 @@ function lastDoneBefore(ch, k) {
 function choreDue(ch, k) {
   const f = ch.freq;
   if (f.type === 'daily') return true;
-  if (f.type === 'weekly') return (f.days || []).includes(weekdayIdx(k));
+  if (f.type === 'weekly') {
+    if (!(f.days || []).includes(weekdayIdx(k))) return false;
+    if (f.alt) return Math.abs(diffDays(weekStart(f.anchor || k), weekStart(k)) / 7) % 2 === 0;
+    return true;
+  }
+  if (f.type === 'once') {
+    if (k === f.date) return true;
+    return k === todayKey() && f.date < k && !S.choreLog.some((l) => l.choreId === ch.id);
+  }
   if (f.type === 'every') {
     const last = lastDoneBefore(ch, k);
     if (!last) return true;
@@ -146,6 +196,7 @@ function choreScheduledOn(ch, k) {
   const t = todayKey();
   if (k <= t) return choreDue(ch, k) || choreDoneOn(ch, k);
   const f = ch.freq;
+  if (f.type === 'once') return k === f.date;
   if (f.type !== 'every') return choreDue(ch, k);
   // tâche "tous les n jours" : prochaine date à partir de la dernière fois
   let last = null;
@@ -161,7 +212,8 @@ function choreScheduledOn(ch, k) {
 function freqLabel(f) {
   if (f.type === 'daily') return 'Tous les jours';
   if (f.type === 'every') return `Tous les ${f.n} jours`;
-  if (f.type === 'weekly') return (f.days || []).map((d) => WD[d]).join(', ') || 'Jamais';
+  if (f.type === 'weekly') return ((f.days || []).length === 7 ? 'Tous les jours' : (f.days || []).map((d) => WD[d]).join(', ') || 'Jamais') + (f.alt ? ' (1 sem. sur 2)' : '');
+  if (f.type === 'once') return 'Une fois, ' + fmtDate(f.date, { weekday: 'short', day: 'numeric', month: 'short' });
   return '';
 }
 
@@ -204,8 +256,8 @@ const BADGES = [
   { id: 'surf30', ic: '🐉', nm: 'Dompteur de dragon', ds: '30 envies surfées', t: () => surfed() >= 30 },
   { id: 'lucide', ic: '🔍', nm: 'Lucidité', ds: '10 envies notées (surfées ou non)', t: () => S.cravings.filter((c) => c.outcome !== 'pending').length >= 10 },
   { id: 'relever', ic: '🌅', nm: 'Je me relève', ds: 'Une envie surfée après un craquage', t: () => relevé() },
-  { id: 'menage30', ic: '🧹', nm: 'Maison nickel', ds: '30 tâches de ménage', t: () => S.choreLog.length >= 30 },
-  { id: 'menage100', ic: '🥷', nm: 'Ninja du ménage', ds: '100 tâches de ménage', t: () => S.choreLog.length >= 100 },
+  { id: 'menage30', ic: '🧹', nm: 'Maison nickel', ds: '30 tâches de ménage', t: () => mineLog().length >= 30 },
+  { id: 'menage100', ic: '🥷', nm: 'Ninja du ménage', ds: '100 tâches de ménage', t: () => mineLog().length >= 100 },
   { id: 'zen10', ic: '🧘', nm: 'Esprit zen', ds: '10 respirations guidées', t: () => Object.values(S.days).reduce((a, d) => a + (d.breath || 0), 0) >= 10 },
   { id: 'merci7', ic: '🙏', nm: 'Gratitude', ds: '7 gratitudes notées', t: () => Object.values(S.days).filter((d) => d.gratitude).length >= 7 },
   { id: 'balance5', ic: '⚖️', nm: 'Suivi poids', ds: '5 pesées', t: () => Object.values(S.days).filter((d) => d.weight).length >= 5 },
@@ -268,7 +320,8 @@ function weekStats(ws) {
     active: ks.filter(isActive).length,
     workouts: S.workouts.filter((w) => inW(w.date)).length,
     workoutMin: S.workouts.filter((w) => inW(w.date)).reduce((a, w) => a + (w.minutes || 0), 0),
-    chores: S.choreLog.filter((l) => inW(l.date)).length,
+    chores: mineLog().filter((l) => inW(l.date)).length,
+    delegated: S.choreLog.filter((l) => inW(l.date) && l.who && l.who !== 'me').length,
     prios: days.reduce((a, d) => a + (d.priorities || []).filter((p) => p.done).length, 0),
     cravings: cr.length,
     surfed: cr.filter((c) => c.outcome === 'surfed').length,
@@ -438,6 +491,7 @@ function renderLock() {
 function migrate(s) {
   const base = newState(s?.profile?.name);
   for (const k of Object.keys(base)) if (s[k] === undefined) s[k] = base[k];
+  if (s.people === base.people) s.people[0].name = s.profile?.name || s.people[0].name;
   return s;
 }
 
@@ -508,7 +562,9 @@ function viewToday() {
   const t = todayKey();
   const d = day(t);
   const prios = d.priorities || [];
-  const due = S.chores.filter((c) => choreDue(c, t) || choreDoneOn(c, t));
+  const dueAll = S.chores.filter((c) => choreDue(c, t) || choreDoneOn(c, t));
+  const due = dueAll.filter(isMine);
+  const others = S.people.filter((p) => p.id !== 'me').map((p) => ({ p, list: dueAll.filter((c) => c.who === p.id) })).filter((x) => x.list.length);
   const doneCount = due.filter((c) => choreDoneOn(c, t)).length;
   const ws = weekStart(t);
   const wk = weekKeys(ws);
@@ -591,11 +647,28 @@ function viewToday() {
       ${due.map((c) => { const done = choreDoneOn(c, t); return `
         <li class="item ${done ? 'done' : ''}">
           <button class="check ${done ? 'on' : ''}" data-action="chore-toggle" data-id="${c.id}" aria-label="Fait">${done ? '✓' : ''}</button>
-          <div class="grow"><div class="txt">${esc(c.name)}</div><div class="sub">${esc(c.zone)} · ${c.minutes} min</div></div>
-        </li>`; }).join('') || '<li class="muted">Rien de prévu. Repos !</li>'}
+          <div class="grow"><div class="txt">${esc(c.name)}</div><div class="sub">${esc(c.zone)} · ${c.minutes} min${(() => { const l = S.choreLog.find((x) => x.choreId === c.id && x.date === t && x.who === 'deleg'); return l ? ` · confiée à ${esc(person(l.to).name)}` : ''; })()}</div></div>
+          ${done ? '' : `<button class="btn btn-sm" data-action="delegate" data-id="${c.id}" title="Déléguer">👉 Déléguer</button>`}
+        </li>`; }).join('') || '<li class="muted">Rien de prévu pour toi. Repos !</li>'}
     </ul>
-    ${due.length && doneCount === due.length ? '<p class="center" style="font-weight:900">✨ Maison nickel pour aujourd’hui !</p>' : ''}
+    ${due.length && doneCount === due.length ? '<p class="center" style="font-weight:900">✨ Ta part est faite pour aujourd’hui !</p>' : ''}
+    <button class="btn btn-sm btn-ghost mt" data-action="chore-new-today">+ Tâche ponctuelle (pour moi ou à déléguer)</button>
   </section>
+
+  ${others.length ? `
+  <section class="card">
+    <div class="card-head"><h2 class="c-orange">Tâches déléguées</h2><span class="meta">${others.reduce((a, o) => a + o.list.filter((c) => choreDoneOn(c, t)).length, 0)}/${others.reduce((a, o) => a + o.list.length, 0)}</span></div>
+    ${others.map(({ p, list }) => `
+      <div class="row" style="margin-top:6px"><b class="grow" style="font-size:17px">${esc(p.emoji)} ${esc(p.name)}</b>
+        <button class="btn btn-sm btn-yellow" data-action="send-tasks" data-p="${p.id}">📤 Envoyer</button></div>
+      <ul class="list">${list.map((c) => { const done = choreDoneOn(c, t); return `
+        <li class="item ${done ? 'done' : ''}">
+          <button class="check ${done ? 'on' : ''}" data-action="chore-toggle" data-id="${c.id}" aria-label="Fait">${done ? '✓' : ''}</button>
+          <div class="grow"><div class="txt">${esc(c.name)}</div></div>
+          ${done ? '' : `<button class="icon-btn" data-action="delegate" data-id="${c.id}" title="Changer de personne">🔁</button>`}
+        </li>`; }).join('')}</ul>`).join('<hr class="dash">')}
+    <p class="small-note">Coche quand c’est fait. « Envoyer » prépare un message (WhatsApp, SMS…) avec ses tâches du jour.</p>
+  </section>` : ''}
 
   <section class="card">
     <div class="card-head"><h2 class="c-green">Sport</h2><span class="meta">${wCount}/${S.profile.sportGoal} cette semaine</span></div>
@@ -634,6 +707,7 @@ function viewWeek() {
       <div class="kpi"><b>${st.surfed}/${st.cravings}</b><span>envies surfées</span></div>
     </div>
   </section>
+  ${balanceHTML(ws)}
   ${days.map((k) => {
     const dd = S.days[k] || { priorities: [] };
     const chores = S.chores.filter((c) => choreScheduledOn(c, k));
@@ -647,7 +721,7 @@ function viewWeek() {
         ${(dd.priorities || []).map((p) => `<span class="tag prio">${p.done ? '✓ ' : '🎯 '}${esc(p.t)}</span>`).join('')}
         ${w.map((x) => `<span class="tag sport">✓ ${esc(x.type)}</span>`).join('')}
         ${planned && !w.length ? `<span class="tag sport">🥋 ${esc(planned)}</span>` : ''}
-        ${chores.map((c) => `<span class="tag chore">${choreDoneOn(c, k) ? '✓ ' : ''}${esc(c.name)}</span>`).join('')}
+        ${chores.map((c) => `<span class="tag chore" ${isMine(c) ? '' : 'style="background:#fff"'}>${choreDoneOn(c, k) ? '✓ ' : ''}${isMine(c) ? '' : esc(person(c.who).emoji) + ' '}${esc(c.name)}</span>`).join('')}
       </div>
       <div class="row wrap mt">
         ${(dd.priorities || []).length < 3 ? `<button class="btn btn-sm" data-action="plan-prio" data-k="${k}">+ priorité</button>` : ''}
@@ -655,6 +729,25 @@ function viewWeek() {
       </div>
     </section>`;
   }).join('')}`;
+}
+
+// Vue d'équilibre : qui porte quoi cette semaine (temps prévu)
+function balanceHTML(ws) {
+  const ks = weekKeys(ws);
+  const rows = S.people.map((p) => {
+    let min = 0, n = 0, done = 0;
+    for (const k of ks) for (const c of S.chores) if ((c.who || 'me') === p.id && choreScheduledOn(c, k)) { n++; min += c.minutes || 0; if (choreDoneOn(c, k)) done++; }
+    return { p, min, n, done };
+  }).filter((r) => r.n);
+  if (rows.length < 2) return '';
+  const max = Math.max(...rows.map((r) => r.min), 1);
+  return `<section class="card">
+    <div class="card-head"><h2 class="c-cyan">Qui fait quoi</h2><span class="meta">temps prévu cette semaine</span></div>
+    ${rows.map((r) => `<div class="row" style="margin:6px 0"><span style="width:96px;font-weight:800;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.p.emoji)} ${esc(r.p.name)}</span>
+      <div class="prog grow"><i style="width:${(r.min / max) * 100}%;background:var(--cyan)"></i></div>
+      <b style="width:76px;text-align:right;font-size:13px;white-space:nowrap">${Math.floor(r.min / 60) ? Math.floor(r.min / 60) + ' h ' : ''}${r.min % 60} min</b></div>`).join('')}
+    <p class="small-note">Tâches cochées cette semaine : ${rows.map((r) => `${esc(r.p.emoji)} ${r.done}/${r.n}`).join(' · ')}</p>
+  </section>`;
 }
 
 // ======================================================================
@@ -802,9 +895,22 @@ function viewMore() {
   </section>
 
   <section class="card">
-    <div class="card-head"><h2 class="c-cyan">Mes tâches de ménage</h2></div>
-    <ul class="list">${S.chores.map((c) => `<li class="item"><div class="grow"><div class="txt">${esc(c.name)}</div><div class="sub">${esc(c.zone)} · ${freqLabel(c.freq)} · ${c.minutes} min</div></div><button class="icon-btn" data-action="chore-edit" data-id="${c.id}">✎</button><button class="icon-btn" data-action="chore-del" data-id="${c.id}">✕</button></li>`).join('')}</ul>
-    <button class="btn btn-sm mt" data-action="chore-new">+ Nouvelle tâche</button>
+    <div class="card-head"><h2 class="c-cyan">Tâches de la maison</h2><span class="meta">${S.chores.length} tâches</span></div>
+    ${S.people.map((p) => { const list = S.chores.filter((c) => (c.who || 'me') === p.id); return list.length ? `
+      <p style="font-weight:900;margin:10px 0 0">${esc(p.emoji)} ${esc(p.id === 'me' ? p.name + ' (moi)' : p.name)}</p>
+      <ul class="list">${list.map((c) => `<li class="item"><div class="grow"><div class="txt">${esc(c.name)}</div><div class="sub">${esc(c.zone)} · ${freqLabel(c.freq)} · ${c.minutes} min</div></div><button class="icon-btn" data-action="chore-edit" data-id="${c.id}">✎</button><button class="icon-btn" data-action="chore-del" data-id="${c.id}">✕</button></li>`).join('')}</ul>` : ''; }).join('')}
+    <div class="row wrap mt">
+      <button class="btn btn-sm" data-action="chore-new">+ Nouvelle tâche</button>
+      <button class="btn btn-sm btn-yellow" data-action="family-load">🏠 Charger le planning familial</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><h2 class="c-green">Le foyer</h2></div>
+    <p class="muted" style="margin-top:0">Les personnes à qui tu peux déléguer des tâches.</p>
+    <ul class="list">${S.people.map((p) => `<li class="item"><span style="font-size:24px">${esc(p.emoji)}</span><span class="txt">${esc(p.name)}${p.id === 'me' ? ' (moi)' : ''}</span>
+      <button class="icon-btn" data-action="person-edit" data-id="${p.id}">✎</button>${p.id === 'me' ? '' : `<button class="icon-btn" data-action="person-del" data-id="${p.id}">✕</button>`}</li>`).join('')}</ul>
+    <button class="btn btn-sm mt" data-action="person-new">+ Ajouter une personne</button>
   </section>
 
   <section class="card">
@@ -1008,23 +1114,30 @@ function breathModal(minutes, after) {
     if (e.target.closest('[data-m="stop"]')) { closeModal(); if (after) after(); else render(); }
   });
 }
-function choreModal(ch) {
+function choreModal(ch, preset = {}) {
   const isNew = !ch;
-  const c = ch ? JSON.parse(JSON.stringify(ch)) : { id: uid(), name: '', zone: 'Maison', freq: { type: 'weekly', days: [weekdayIdx(todayKey())] }, minutes: 10 };
+  const c = ch ? JSON.parse(JSON.stringify(ch)) : { id: uid(), name: '', zone: 'Maison', who: 'me', freq: { type: 'weekly', days: [weekdayIdx(todayKey())] }, minutes: 10, ...preset };
+  c.who ||= 'me';
   const draw = () => {
     const name = $('#cn')?.value ?? c.name, zone = $('#cz')?.value ?? c.zone, min = $('#cm')?.value ?? c.minutes, n = $('#cnn')?.value ?? c.freq.n ?? 3;
     c.name = name; c.zone = zone; c.minutes = +min || 10; if (c.freq.type === 'every') c.freq.n = Math.max(2, +n || 3);
+    if (c.freq.type === 'once' && $('#cdate')) c.freq.date = $('#cdate').value || todayKey();
     openModal(`
       <h2>${isNew ? 'Nouvelle tâche' : 'Modifier la tâche'}</h2>
       <label class="lbl" for="cn">Tâche</label><input class="input" id="cn" value="${esc(c.name)}" maxlength="80" placeholder="Ex. Nettoyer les vitres">
+      <label class="lbl">Qui s’en occupe ?</label>
+      <div class="chips">${S.people.map((p) => `<button class="chip ${c.who === p.id ? 'on' : ''}" data-m="who" data-v="${p.id}">${esc(p.emoji)} ${esc(p.id === 'me' ? 'Moi' : p.name)}</button>`).join('')}</div>
       <label class="lbl" for="cz">Zone</label><input class="input" id="cz" value="${esc(c.zone)}" maxlength="40">
       <label class="lbl">Fréquence</label>
       <div class="chips">
+        <button class="chip ${c.freq.type === 'once' ? 'on' : ''}" data-m="ft" data-v="once">Une seule fois</button>
         <button class="chip ${c.freq.type === 'daily' ? 'on' : ''}" data-m="ft" data-v="daily">Tous les jours</button>
         <button class="chip ${c.freq.type === 'weekly' ? 'on' : ''}" data-m="ft" data-v="weekly">Jours fixes</button>
         <button class="chip ${c.freq.type === 'every' ? 'on' : ''}" data-m="ft" data-v="every">Tous les X jours</button>
       </div>
-      ${c.freq.type === 'weekly' ? `<div class="chips mt">${WD.map((w, i) => `<button class="chip ${(c.freq.days || []).includes(i) ? 'on' : ''}" data-m="wd" data-v="${i}">${w}</button>`).join('')}</div>` : ''}
+      ${c.freq.type === 'weekly' ? `<div class="chips mt">${WD.map((w, i) => `<button class="chip ${(c.freq.days || []).includes(i) ? 'on' : ''}" data-m="wd" data-v="${i}">${w}</button>`).join('')}</div>
+        <div class="chips mt"><button class="chip ${c.freq.alt ? 'on' : ''}" data-m="alt">${c.freq.alt ? '✓ ' : ''}1 semaine sur 2 (en commençant cette semaine)</button></div>` : ''}
+      ${c.freq.type === 'once' ? `<div class="row mt"><span style="font-weight:800">Le</span><input class="input" id="cdate" type="date" value="${c.freq.date || todayKey()}"></div>` : ''}
       ${c.freq.type === 'every' ? `<div class="row mt"><span style="font-weight:800">Tous les</span><input class="input" style="width:80px" id="cnn" type="number" min="2" max="90" value="${c.freq.n || 3}"><span style="font-weight:800">jours</span></div>` : ''}
       <label class="lbl" for="cm">Durée estimée (min)</label><input class="input" id="cm" type="number" min="1" max="240" value="${c.minutes}">
       <button class="btn btn-primary btn-block mt" data-m="ok">Enregistrer</button>
@@ -1034,16 +1147,91 @@ function choreModal(ch) {
       const m = b.dataset.m;
       if (m === 'ft') {
         const v = b.dataset.v;
-        c.freq = v === 'daily' ? { type: 'daily' } : v === 'weekly' ? { type: 'weekly', days: c.freq.days || [weekdayIdx(todayKey())] } : { type: 'every', n: c.freq.n || 3 };
+        c.freq = v === 'daily' ? { type: 'daily' } : v === 'weekly' ? { type: 'weekly', days: c.freq.days || [weekdayIdx(todayKey())] } : v === 'once' ? { type: 'once', date: todayKey() } : { type: 'every', n: c.freq.n || 3 };
         draw();
+      } else if (m === 'who') { c.who = b.dataset.v; draw();
+      } else if (m === 'alt') { c.freq.alt = !c.freq.alt; c.freq.anchor = weekStart(todayKey()); draw();
       } else if (m === 'wd') {
         const i = +b.dataset.v; const s = new Set(c.freq.days || []); s.has(i) ? s.delete(i) : s.add(i); c.freq.days = [...s].sort(); draw();
       } else if (m === 'cancel') closeModal();
       else if (m === 'ok') {
         c.name = $('#cn').value.trim(); c.zone = $('#cz').value.trim() || 'Maison'; c.minutes = +$('#cm').value || 10;
         if (c.freq.type === 'every') c.freq.n = Math.max(2, +$('#cnn').value || 3);
+        if (c.freq.type === 'once') c.freq.date = $('#cdate').value || todayKey();
         if (!c.name) return toast('Donne un nom à la tâche');
         if (isNew) S.chores.push(c); else S.chores[S.chores.findIndex((x) => x.id === c.id)] = c;
+        save(); closeModal(); render();
+      }
+    });
+  };
+  draw();
+}
+function delegateModal(ch) {
+  openModal(`<h2>👉 Déléguer</h2>
+    <p style="font-weight:700;margin-top:0">« ${esc(ch.name)} » : qui s’en occupe ?</p>
+    <div class="chips">${S.people.map((p) => `<button class="chip ${(ch.who || 'me') === p.id ? 'on' : ''}" data-m="who" data-v="${p.id}">${esc(p.emoji)} ${esc(p.id === 'me' ? 'Moi' : p.name)}</button>`).join('')}</div>
+    <label class="lbl">Pour combien de temps ?</label>
+    <div class="row wrap">
+      <button class="btn btn-sm btn-yellow" data-m="scope" data-v="today">Juste aujourd’hui</button>
+      ${ch.freq.type === 'once' ? '' : '<button class="btn btn-sm" data-m="scope" data-v="always">À chaque fois</button>'}
+    </div>
+    <p class="small-note">« Juste aujourd’hui » crée une tâche ponctuelle pour cette personne ; ta tâche habituelle est cochée comme confiée.</p>
+    <button class="btn btn-ghost btn-block mt" data-m="cancel">Annuler</button>`);
+  let who = ch.who || 'me';
+  $('.modal').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-m]'); if (!b) return;
+    if (b.dataset.m === 'who') { who = b.dataset.v; $('.modal').querySelectorAll('[data-m="who"]').forEach((x) => x.classList.toggle('on', x === b)); }
+    else if (b.dataset.m === 'cancel') closeModal();
+    else if (b.dataset.m === 'scope') {
+      const t = todayKey();
+      if (b.dataset.v === 'always' || ch.freq.type === 'once') ch.who = who;
+      else if (who !== (ch.who || 'me')) {
+        S.chores.push({ id: uid(), name: ch.name, zone: ch.zone, who, minutes: ch.minutes, freq: { type: 'once', date: t }, last: null, from: ch.id });
+        S.choreLog.push({ id: uid(), choreId: ch.id, date: t, who: 'deleg', to: who });
+      }
+      save(); closeModal(); render();
+      toast(`Confié à ${esc(person(who).emoji)} ${esc(person(who).name)}`, 'DÉLÉGUÉ !');
+    }
+  });
+}
+function tasksMessage(pid) {
+  const t = todayKey();
+  const p = person(pid);
+  const list = S.chores.filter((c) => c.who === pid && choreDue(c, t) && !choreDoneOn(c, t));
+  if (!list.length) return null;
+  return `Coucou ${p.name} ! Tes missions du jour 💪\n${list.map((c) => '☐ ' + c.name).join('\n')}\nMerci pour ton aide ! 🙏`;
+}
+async function sendTasks(pid) {
+  const msg = tasksMessage(pid);
+  if (!msg) return toast('Rien à envoyer : tout est fait ✨');
+  if (navigator.share) { try { await navigator.share({ text: msg }); return; } catch (e) { if (e.name === 'AbortError') return; } }
+  openModal(`<h2>📤 Envoyer à ${esc(person(pid).name)}</h2>
+    <textarea class="input" rows="7" readonly>${esc(msg)}</textarea>
+    <a class="btn btn-green btn-block mt" style="text-align:center;text-decoration:none" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener">WhatsApp</a>
+    <a class="btn btn-block mt" style="text-align:center;text-decoration:none" href="sms:?&body=${encodeURIComponent(msg)}">SMS</a>
+    <button class="btn btn-yellow btn-block mt" data-action="copy-msg">Copier le texte</button>
+    <button class="btn btn-ghost btn-block mt" data-action="modal-close">Fermer</button>`);
+}
+function personModal(p) {
+  const isNew = !p;
+  const emojis = ['👨', '👩', '🧑', '👧', '👦', '👶', '👵', '👴', '🧔', '👱‍♀️', '🧕', '🐶'];
+  let emoji = p?.emoji || '🧑';
+  const draw = () => {
+    const nm = $('#pn')?.value ?? p?.name ?? '';
+    openModal(`<h2>${isNew ? 'Ajouter une personne' : 'Modifier'}</h2>
+      <label class="lbl" for="pn">Prénom</label><input class="input" id="pn" maxlength="24" value="${esc(nm)}">
+      <label class="lbl">Avatar</label>
+      <div class="chips">${emojis.map((x) => `<button class="chip ${emoji === x ? 'on' : ''}" data-m="em" data-v="${x}" style="font-size:20px">${x}</button>`).join('')}</div>
+      <button class="btn btn-primary btn-block mt" data-m="ok">Enregistrer</button>
+      <button class="btn btn-ghost btn-block mt" data-m="cancel">Annuler</button>`);
+    $('.modal').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-m]'); if (!b) return;
+      if (b.dataset.m === 'em') { emoji = b.dataset.v; draw(); }
+      else if (b.dataset.m === 'cancel') closeModal();
+      else if (b.dataset.m === 'ok') {
+        const name = $('#pn').value.trim(); if (!name) return toast('Donne un prénom');
+        if (isNew) S.people.push({ id: 'p-' + uid(), name, emoji });
+        else { p.name = name; p.emoji = emoji; if (p.id === 'me') S.profile.name = name; }
         save(); closeModal(); render();
       }
     });
@@ -1182,8 +1370,9 @@ document.addEventListener('click', (e) => {
       break;
     case 'chore-toggle': {
       const ch = S.chores.find((c) => c.id === a.dataset.id);
-      if (choreDoneOn(ch, t)) { S.choreLog = S.choreLog.filter((l) => !(l.choreId === ch.id && l.date === t)); S.xp = Math.max(0, S.xp - 10); save(); }
-      else { S.choreLog.push({ id: uid(), choreId: ch.id, date: t }); ch.last = t; award(10, ['PAF !', 'ZIP !', 'SHLAK !', 'POW !'][S.choreLog.length % 4], ch.name); }
+      if (choreDoneOn(ch, t)) { S.choreLog = S.choreLog.filter((l) => !(l.choreId === ch.id && l.date === t)); S.xp = Math.max(0, S.xp - (isMine(ch) ? 10 : 3)); save(); }
+      else if (!isMine(ch)) { S.choreLog.push({ id: uid(), choreId: ch.id, date: t, who: ch.who }); award(3, 'TEAM !', `${person(ch.who).name} a fait sa part`); }
+      else { S.choreLog.push({ id: uid(), choreId: ch.id, date: t, who: 'me' }); ch.last = t; award(10, ['PAF !', 'ZIP !', 'SHLAK !', 'POW !'][S.choreLog.length % 4], ch.name); }
       render(); break;
     }
     case 'craving-start': cravingStartModal(); break;
@@ -1228,6 +1417,34 @@ document.addEventListener('click', (e) => {
     case 'plan-new': planModal(); break;
     case 'plan-del': S.plans = S.plans.filter((p) => p.id !== a.dataset.id); save(); render(); break;
     case 'chore-new': choreModal(null); break;
+    case 'chore-new-today': choreModal(null, { freq: { type: 'once', date: t } }); break;
+    case 'delegate': delegateModal(S.chores.find((c) => c.id === a.dataset.id)); break;
+    case 'send-tasks': sendTasks(a.dataset.p); break;
+    case 'copy-msg': { const ta = $('.modal textarea'); ta.select(); navigator.clipboard?.writeText(ta.value).then(() => toast('Copié !')).catch(() => document.execCommand('copy')); break; }
+    case 'person-new': personModal(null); break;
+    case 'person-edit': personModal(S.people.find((p) => p.id === a.dataset.id)); break;
+    case 'person-del': {
+      const p = S.people.find((x) => x.id === a.dataset.id);
+      openModal(`<h2>Retirer ${esc(p.name)} ?</h2><p style="font-weight:700">Ses tâches te reviendront.</p>
+        <button class="btn btn-primary btn-block" data-action="person-del-ok" data-id="${p.id}">Retirer</button>
+        <button class="btn btn-ghost btn-block mt" data-action="modal-close">Annuler</button>`);
+      break;
+    }
+    case 'person-del-ok': S.chores.forEach((c) => { if (c.who === a.dataset.id) c.who = 'me'; }); S.people = S.people.filter((p) => p.id !== a.dataset.id); save(); closeModal(); render(); break;
+    case 'family-load':
+      openModal(`<h2>🏠 Planning familial</h2>
+        <p style="font-weight:700;margin-top:0">Charge le tableau des tâches de la maison : 19 tâches réparties entre toi, Maman, l’Ado et la Petite (repas, vaisselle, table, poubelles lundi et jeudi, lessive et recyclable une semaine sur deux, rangement ensemble le dimanche…).</p>
+        <button class="btn btn-primary btn-block" data-action="family-ok" data-mode="replace">Remplacer mes tâches actuelles</button>
+        <button class="btn btn-block mt" data-action="family-ok" data-mode="add">Ajouter aux tâches actuelles</button>
+        <button class="btn btn-ghost btn-block mt" data-action="modal-close">Annuler</button>`);
+      break;
+    case 'family-ok': {
+      for (const dp of defaultPeople()) if (!S.people.some((p) => p.id === dp.id)) S.people.push(dp);
+      const fam = familyChores();
+      S.chores = a.dataset.mode === 'replace' ? fam : S.chores.concat(fam);
+      save(); closeModal(); render(); toast('Planning familial chargé', 'TEAM !');
+      break;
+    }
     case 'chore-edit': choreModal(S.chores.find((c) => c.id === a.dataset.id)); break;
     case 'chore-del': {
       const ch = S.chores.find((c) => c.id === a.dataset.id);

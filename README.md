@@ -8,7 +8,8 @@ Ton outil perso pour organiser le **ménage**, la **santé**, le **sport** et le
 
 - **Ma journée** : 3 priorités maximum, « vider ma tête », check-in (humeur, sommeil, poids, une gratitude), ménage du jour, séance de sport, respiration guidée.
 - **Envie de sucre** : bouton « J'ai une envie » avec minuteur de 15 minutes, conseils, ton plan « si… alors… » pour ce déclencheur, et un message bienveillant si tu craques.
-- **Ma semaine** : les 7 prochains jours (ménage prévu, séances, priorités) pour anticiper.
+- **Ma semaine** : les 7 prochains jours (ménage prévu, séances, priorités) pour anticiper, et « Qui fait quoi » (temps prévu par personne).
+- **Délégation (V1.1)** : chaque tâche a un responsable (toi, Maman, l’Ado, la Petite… modifiable dans Dojo → Le foyer). Bouton « Déléguer » (juste aujourd’hui ou à chaque fois), tâches ponctuelles, « 1 semaine sur 2 », bouton « Envoyer » qui prépare un message WhatsApp ou SMS avec les tâches du jour de la personne, et le planning familial prêt à charger.
 - **Tableau de bord** : courbes poids, humeur, sommeil ; envies surfées, séances et ménage par semaine ; déclencheurs les plus fréquents.
 - **Motivation** : XP, niveaux (Apprenti → Légende), 21 badges, et un **bilan hebdo automatique** chaque lundi. Pas de série à ne jamais casser.
 
