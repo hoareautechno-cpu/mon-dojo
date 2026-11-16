@@ -27,7 +27,7 @@ jobs:
           case "$SCHEDULE" in
             "30 3 * * *")  T="Ohayō ! ⚡"; M="Choisis tes 3 priorités du jour (30 secondes).";;
             "30 8 * * *")  T="Pause déjeuner 🍱"; M="Un vrai repas avec des protéines, sans sauter de repas.";;
-            "30 16 * * *") T="Check-in du soir 🌙"; M="Humeur, envies, 10 min de rangement. Tu gères.";;
+            "30 16 * * *") T="Check-in du soir 🌙"; M="Humeur, envies, dépenses du jour, 10 min de rangement. Tu gères.";;
             "0 3 * * 1")   T="Bilan de la semaine 📜"; M="Ton bilan hebdo est prêt dans Mon Dojo.";;
             "0 14 * * 0")  T="Prépare ta semaine 🗓️"; M="Place tes séances de sport et tes priorités dans « Ma semaine ».";;
             *)             T="Test Mon Dojo 💥"; M="Les rappels fonctionnent !";;

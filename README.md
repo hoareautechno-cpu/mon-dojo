@@ -13,6 +13,14 @@ Ton outil perso pour organiser le **ménage**, la **santé**, le **sport** et le
 - **Tableau de bord** : courbes poids, humeur, sommeil ; envies surfées, séances et ménage par semaine ; déclencheurs les plus fréquents.
 - **Motivation** : XP, niveaux (Apprenti → Légende), 21 badges, et un **bilan hebdo automatique** chaque lundi. Pas de série à ne jamais casser.
 
+## Nouveautés de la V2
+
+- **Argent** (nouvel onglet) : dépense notée en 10 secondes (montant, catégorie, note, paiement), totaux du jour, de la semaine et du mois, comparaison avec le mois précédent, budgets par catégorie (vert, orange à 80 %, rouge), dépenses fixes proposées chaque mois à confirmer, liste « en attente 48 h » contre les achats impulsifs, épargne de précaution, export CSV.
+- **Projets perso** : projets découpés en petites actions ; la prochaine action s'affiche dans Ma journée.
+- **Famille** : 15 minutes rien qu'à chaque enfant, point couple hebdo, sortie à deux chaque mois.
+- **Stats et bilan** : dépenses par semaine, snacks et sucreries comparés aux envies, argent dans le bilan hebdo, 7 nouveaux badges.
+- **Réglages** : choisis les modules affichés dans Ma journée.
+
 ## Installer sur le téléphone
 
 1. Ouvre le lien de l'appli dans Chrome (Android) ou Safari (iPhone).
